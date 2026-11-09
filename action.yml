@@ -56,6 +56,9 @@ runs:
         if [ -n "$PACKAGE" ]; then
           case "$PACKAGE" in -*) echo "::error::package must not start with -"; exit 1 ;; esac
           spec="$PACKAGE"
+          # A local tarball, relative to the job's working directory (npm
+          # would read it relative to --prefix).
+          if [ -f "$PACKAGE" ]; then spec="$(cd "$(dirname "$PACKAGE")" && pwd)/$(basename "$PACKAGE")"; fi
         elif [ "$VERSION" = latest ] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
           spec="@wasmbed/cli@$VERSION"
         else
