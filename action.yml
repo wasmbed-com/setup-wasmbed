@@ -1,0 +1,81 @@
+# Installs the Wasmbed CLI (@wasmbed/cli) on the runner and puts `wasmbed`
+# on the PATH, so later steps run `wasmbed test`, `wasmbed upload` and
+# `wasmbed deploy`. Everything else is the CLI's job, so the action stays
+# the same as commands are added.
+#
+# Copied from the Wasmbed platform repository, where it is tested against
+# each CLI release before a new version of the action is tagged here.
+
+name: Set up Wasmbed
+description: Install the Wasmbed CLI to test, upload and deploy wasm apps for microcontrollers from your workflow.
+author: Wasmbed
+branding:
+  icon: cpu
+  color: purple
+
+inputs:
+  version:
+    description: The @wasmbed/cli version to install, exact (for example 0.1.0) or `latest`. The default is the version this release of the action was tested with.
+    required: false
+    default: '0.1.0'
+  project:
+    description: The project commands use when wasmbed.json names none. Sets WASMBED_PROJECT for later steps.
+    required: false
+    default: ''
+  package:
+    description: Install this npm package spec instead of @wasmbed/cli@<version> (a tarball path or URL). For testing the CLI itself.
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: The CLI version that was installed.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install the Wasmbed CLI
+      id: install
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        PACKAGE: ${{ inputs.package }}
+        PROJECT: ${{ inputs.project }}
+      run: |
+        set -euo pipefail
+        for v in "$VERSION" "$PACKAGE" "$PROJECT"; do
+          case "$v" in *$'\n'* | *$'\r'*) echo "::error::inputs are one line each"; exit 1 ;; esac
+        done
+        major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
+        if [ "$major" -lt 20 ]; then
+          echo "::error::The Wasmbed CLI needs Node 20 or newer (found ${major}). Add actions/setup-node before this step."
+          exit 1
+        fi
+
+        if [ -n "$PACKAGE" ]; then
+          case "$PACKAGE" in -*) echo "::error::package must not start with -"; exit 1 ;; esac
+          spec="$PACKAGE"
+        elif [ "$VERSION" = latest ] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+          spec="@wasmbed/cli@$VERSION"
+        else
+          echo "::error::version must be an exact version such as 0.1.0, or latest (got '$VERSION')"
+          exit 1
+        fi
+
+        # Its own folder, so nothing needs sudo and the job's own
+        # node_modules is untouched. --ignore-scripts: the CLI needs no
+        # install scripts in CI (only `wasmbed setup`'s USB code has native
+        # parts, and CI never plugs in a board).
+        prefix="$RUNNER_TEMP/wasmbed-cli"
+        mkdir -p "$prefix"
+        npm install --prefix "$prefix" --no-save --no-fund --no-audit \
+          --ignore-scripts --loglevel=error "$spec"
+        bin="$prefix/node_modules/.bin"
+        [ -x "$bin/wasmbed" ] || { echo "::error::$spec has no wasmbed command"; exit 1; }
+        echo "$bin" >> "$GITHUB_PATH"
+
+        installed=$("$bin/wasmbed" --version)
+        echo "version=$installed" >> "$GITHUB_OUTPUT"
+        if [ -n "$PROJECT" ]; then echo "WASMBED_PROJECT=$PROJECT" >> "$GITHUB_ENV"; fi
+        echo "Installed the Wasmbed CLI $installed"

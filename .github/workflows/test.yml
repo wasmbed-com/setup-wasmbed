@@ -1,0 +1,38 @@
+# Installs the published CLI with this action and makes, builds and tests
+# an app with it, on Linux, macOS and Windows. Nothing talks to Wasmbed.
+
+name: test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - id: setup
+        uses: ./
+
+      - name: Make, build and test an app
+        shell: bash
+        run: |
+          set -euo pipefail
+          wasmbed --version
+          cd "$RUNNER_TEMP"
+          wasmbed init blinky --template blink --local
+          cd blinky
+          wasmbed build
+          wasmbed test
