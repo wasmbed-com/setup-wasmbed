@@ -1,0 +1,13 @@
+version: 2
+# Keeps the commit-pinned actions in the test workflow (and action.yml)
+# current, grouped into one PR a week.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
